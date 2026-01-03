@@ -33,8 +33,15 @@ export default async function handler(req: any, res: any) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  const apiKey = process.env.GOOGLE_API_KEY_PRICEMARKPASSWORD;
+
+  if (!apiKey) {
+    console.error("Critical Error: GOOGLE_API_KEY_PRICEMARKPASSWORD is not set in environment.");
+    return res.status(500).json({ error: 'Configuración de API incompleta en el servidor.' });
+  }
+
   const { action, payload } = req.body;
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey });
 
   try {
     if (action === 'extractFromImage') {
@@ -84,9 +91,9 @@ export default async function handler(req: any, res: any) {
       return res.status(200).json({ items, sources });
     }
 
-    return res.status(400).json({ error: 'Invalid action' });
+    return res.status(400).json({ error: 'Acción no válida' });
   } catch (error: any) {
-    console.error("Proxy Error:", error);
-    return res.status(500).json({ error: error.message });
+    console.error("Proxy Server Error:", error);
+    return res.status(500).json({ error: 'Error procesando la solicitud con IA.' });
   }
 }
