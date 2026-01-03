@@ -23,7 +23,8 @@ import {
   Moon,
   Sun,
   Zap,
-  Settings2
+  Settings2,
+  ExternalLink
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -33,6 +34,8 @@ const App: React.FC = () => {
   const [urlInput, setUrlInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
+  // State to store web search grounding sources
+  const [sources, setSources] = useState<{ uri: string; title: string }[]>([]);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     return localStorage.getItem('theme') === 'dark' || 
       (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
@@ -115,6 +118,8 @@ const App: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     setAppState(AppState.ANALYZING);
+    // Clear previous sources on new import
+    setSources([]);
 
     const reader = new FileReader();
     const ext = file.name.split('.').pop()?.toLowerCase();
@@ -308,6 +313,7 @@ const App: React.FC = () => {
   const handleClearView = () => {
     if (confirm("¿Limpiar la vista actual? Los cambios no guardados en el historial se perderán.")) {
       setProducts([]);
+      setSources([]);
       dbService.saveMasterProducts([]);
       setImportSummary(null);
       setAppState(AppState.IDLE);
@@ -317,9 +323,12 @@ const App: React.FC = () => {
   const handleUrlImport = async () => {
     if (!urlInput) return;
     setAppState(AppState.ANALYZING);
+    setSources([]);
     try {
       const result = await extractPricesFromUrl(urlInput);
       processImportedData(result.items, 'url');
+      // Store grounding sources for display as required by guidelines
+      setSources(result.sources || []);
       setUrlInput('');
     } catch (err) {
       setAppState(AppState.IDLE);
@@ -338,7 +347,10 @@ const App: React.FC = () => {
     if(confirm("¿Estás seguro de eliminar este producto?")) {
       const updated = dbService.deleteProduct(id);
       setProducts(updated);
-      if (updated.length === 0) setAppState(AppState.IDLE);
+      if (updated.length === 0) {
+        setAppState(AppState.IDLE);
+        setSources([]);
+      }
     }
   }, []);
 
@@ -453,6 +465,7 @@ const App: React.FC = () => {
                       <h3 className="text-2xl font-black uppercase mb-2 dark:text-white">Imágenes / IA</h3>
                       <FileUpload onFileSelect={async (file) => {
                         setAppState(AppState.ANALYZING);
+                        setSources([]);
                         const reader = new FileReader();
                         reader.readAsDataURL(file);
                         reader.onload = async () => {
@@ -487,6 +500,7 @@ const App: React.FC = () => {
                       <button onClick={() => {
                         const newItem: ProductItem = { id: generateId(), name: "Nuevo Producto", brand: "", originalPrice: 0, currency: "$", source: 'manual', lastUpdated: new Date().toISOString() };
                         setProducts([newItem, ...products]);
+                        setSources([]);
                         dbService.saveMasterProducts([newItem, ...products]);
                         setAppState(AppState.DATABASE);
                       }} className="px-8 py-4 bg-slate-800 dark:bg-slate-700 text-white dark:text-neonPink rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-slate-700 dark:hover:bg-neonPink dark:hover:text-white transition-all">Empezar de cero</button>
@@ -569,12 +583,13 @@ const App: React.FC = () => {
                   </div>
                 </aside>
 
-                <div className="lg:col-span-9">
+                <div className="lg:col-span-9 space-y-6">
                   <div className="flex bg-white dark:bg-slate-900/50 backdrop-blur-md rounded-2xl p-1.5 border border-slate-200 dark:border-cyan-500/20 mb-6 w-fit ml-auto shadow-sm">
                     <button onClick={() => setViewPreset('internal')} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${settings.visibility.baseCost ? 'bg-slate-900 dark:bg-cyan-500 text-white dark:text-slate-950 shadow-md' : 'text-slate-400 dark:text-slate-600'}`}>Interno</button>
                     <button onClick={() => setViewPreset('reseller')} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${!settings.visibility.baseCost && settings.visibility.sellerPrice ? 'bg-slate-900 dark:bg-cyan-500 text-white dark:text-slate-950 shadow-md' : 'text-slate-400 dark:text-slate-600'}`}>Reventa</button>
                     <button onClick={() => setViewPreset('client')} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${!settings.visibility.sellerPrice ? 'bg-slate-900 dark:bg-cyan-500 text-white dark:text-slate-950 shadow-md' : 'text-slate-400 dark:text-slate-600'}`}>Cliente</button>
                   </div>
+                  
                   <ResultsTable 
                     items={processedItems}
                     currencySymbol={settings.globalCurrency === 'auto' ? '$' : settings.globalCurrency}
@@ -584,6 +599,29 @@ const App: React.FC = () => {
                     onDelete={handleDeleteProduct}
                     onAdd={handleAddManualProduct}
                   />
+
+                  {/* Display information sources extracted via web search grounding */}
+                  {sources.length > 0 && (
+                    <div className="bg-white dark:bg-slate-900/40 backdrop-blur-md rounded-[2rem] p-8 border border-slate-200 dark:border-cyan-500/20 shadow-lg animate-in fade-in slide-in-from-bottom-4">
+                      <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 mb-4 flex items-center gap-2">
+                        <Globe size={14}/> Fuentes de Información
+                      </h4>
+                      <div className="flex flex-wrap gap-3">
+                        {sources.map((src, idx) => (
+                          <a 
+                            key={idx} 
+                            href={src.uri} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-2 px-4 py-2 bg-slate-50 dark:bg-cyan-500/10 text-blue-600 dark:text-neonCyan rounded-xl text-[11px] font-bold hover:bg-blue-600 dark:hover:bg-neonCyan hover:text-white dark:hover:text-slate-950 transition-all border border-transparent dark:border-cyan-500/20 shadow-sm"
+                          >
+                            <span className="truncate max-w-[200px] text-xs">{src.title}</span>
+                            <ExternalLink size={12}/>
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

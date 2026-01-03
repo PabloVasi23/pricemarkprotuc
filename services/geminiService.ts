@@ -2,8 +2,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { ExtractedData } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 const EXTRACTION_PROMPT = `Extract all distinct product names, their brands or variants (if identifiable), and their unit prices.
 
 SPECIFIC PATTERN HANDLING:
@@ -42,6 +40,7 @@ const RESPONSE_SCHEMA = {
 
 export const extractPricesFromImage = async (base64Image: string, mimeType: string): Promise<ExtractedData> => {
   try {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: {
@@ -74,11 +73,9 @@ export const extractPricesFromImage = async (base64Image: string, mimeType: stri
   }
 };
 
-/**
- * Procesa datos desordenados de CSVs o Scrapers usando IA con criterio humano.
- */
 export const cleanMessyDataWithAI = async (rawData: string): Promise<ExtractedData> => {
   try {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: `I have messy data from a CSV scraper. All info (name, brand, and price) is mixed in strings. 
@@ -106,7 +103,7 @@ export const cleanMessyDataWithAI = async (rawData: string): Promise<ExtractedDa
 
 export const extractPricesFromUrl = async (url: string): Promise<ExtractedData> => {
   try {
-    // Using gemini-3-pro-preview for complex web search and extraction tasks
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: "gemini-3-pro-preview",
       contents: `Search for the current product prices at this URL: ${url}. 
@@ -126,8 +123,6 @@ export const extractPricesFromUrl = async (url: string): Promise<ExtractedData> 
     });
 
     const text = response.text || "";
-    
-    // Search for JSON in the text response
     const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/) || text.match(/\{[\s\S]*\}/);
     let items: any[] = [];
     
@@ -144,7 +139,6 @@ export const extractPricesFromUrl = async (url: string): Promise<ExtractedData> 
         console.warn("Failed to parse JSON from response", e);
       }
     } else if (!text) {
-      // If there's literally no text at all, it might be a tool error or block
       throw new Error("The model did not return any text. This might be due to access restrictions on the URL.");
     }
 
