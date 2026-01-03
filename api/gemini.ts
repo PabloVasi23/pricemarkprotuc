@@ -32,15 +32,17 @@ export default async function handler(req: any, res: any) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // Requisito: Usar exclusivamente process.env.price_mark_key
+  // REQUISITO: La variable de entorno configurada en Vercel es 'price_mark_key'
   const apiKey = process.env.price_mark_key;
 
   if (!apiKey) {
-    console.error("Critical Error: price_mark_key is not set in environment.");
+    console.error("Critical: price_mark_key environment variable is missing.");
     return res.status(500).json({ error: 'Configuración de API incompleta en el servidor' });
   }
 
   const { action, payload } = req.body;
+  
+  // Instanciamos el SDK de Google GenAI
   const ai = new GoogleGenAI({ apiKey });
 
   try {
@@ -74,6 +76,7 @@ export default async function handler(req: any, res: any) {
     }
 
     if (action === 'extractFromUrl') {
+      // Usamos gemini-3-pro-preview para búsqueda web
       const response = await ai.models.generateContent({
         model: "gemini-3-pro-preview",
         contents: `Extract prices from this URL: ${payload.url}\n\n${EXTRACTION_PROMPT}`,
@@ -81,8 +84,17 @@ export default async function handler(req: any, res: any) {
       });
 
       const text = response.text || "";
+      // Extractor robusto de bloques JSON de la respuesta de texto
       const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/) || text.match(/\{[\s\S]*\}/);
-      const items = jsonMatch ? JSON.parse(jsonMatch[1] || jsonMatch[0]).items : [];
+      let items = [];
+      try {
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[1] || jsonMatch[0]);
+          items = parsed.items || [];
+        }
+      } catch (e) {
+        console.error("Error al parsear salida de IA:", text);
+      }
       
       const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks
         ?.filter(c => c.web?.uri)
@@ -93,7 +105,7 @@ export default async function handler(req: any, res: any) {
 
     return res.status(400).json({ error: 'Acción no válida' });
   } catch (error: any) {
-    console.error("Proxy Server Error:", error);
+    console.error("Vercel Proxy Error:", error);
     return res.status(500).json({ error: 'Error procesando la solicitud con IA' });
   }
 }
